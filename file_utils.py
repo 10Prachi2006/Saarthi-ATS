@@ -1,30 +1,35 @@
-import csv
+from pymongo import MongoClient
 import os
 
-CANDIDATES_FILE = "candidates.csv"
-FIELDNAMES = ["name", "phone", "resume_summary", "AI_score", "shortlist_status", "call_status", "vapi_result"]
+MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
+DB_NAME = "ats_db"
+COLLECTION_NAME = "candidates"
+
+def get_db():
+    client = MongoClient(MONGO_URI)
+    db = client[DB_NAME]
+    return db
 
 def load_candidates():
-    if not os.path.exists(CANDIDATES_FILE):
-        with open(CANDIDATES_FILE, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-            writer.writeheader()
-        return []
-    with open(CANDIDATES_FILE, "r") as f:
-        return list(csv.DictReader(f))
+    db = get_db()
+    return list(db[COLLECTION_NAME].find({}, {'_id': 0}))
 
 def save_candidate(candidate):
-    with open(CANDIDATES_FILE, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        writer.writerow(candidate)
+    db = get_db()
+    db[COLLECTION_NAME].insert_one(candidate)
+
+def bulk_save_candidates(candidates):
+    db = get_db()
+    db[COLLECTION_NAME].insert_many(candidates)
+
+def clear_candidates():
+    db = get_db()
+    db[COLLECTION_NAME].delete_many({})
 
 def update_candidate(name, phone, updates):
-    candidates = load_candidates()
-    for c in candidates:
-        if c["name"] == name and c["phone"] == phone:
-            c.update(updates)
-            break
-    with open(CANDIDATES_FILE, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-        writer.writeheader()
-        writer.writerows(candidates)
+    db = get_db()
+    db[COLLECTION_NAME].update_one({"name": name, "phone": phone}, {"$set": updates})
+
+def candidate_exists(name, phone):
+    db = get_db()
+    return db[COLLECTION_NAME].find_one({"name": name, "phone": phone}) is not None
